@@ -124,7 +124,8 @@ Optional settings in `.env`:
 
 ```env
 VIDEO_MODEL=veo-3.1-generate-preview
-IMAGE_MODEL=imagen-4.0-generate-001
+IMAGE_MODEL=gemini-3.1-flash-image
+PLANNER_MODEL=gemini-3.6-flash
 TARGET_DURATION_SEC=120
 CLIP_DURATION_SEC=8
 ```

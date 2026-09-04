@@ -76,7 +76,7 @@ Brief:
 {prompt}
 """
     response = client.models.generate_content(
-        model=os.getenv("PLANNER_MODEL", "gemini-2.0-flash"),
+        model=os.getenv("PLANNER_MODEL", "gemini-3.6-flash"),
         contents=planner_prompt,
         config=types.GenerateContentConfig(temperature=0.7),
     )
@@ -97,28 +97,48 @@ Brief:
 def generate_image(client, prompt: str, out_path: Path) -> Path:
     from google.genai import types
 
-    model = os.getenv("IMAGE_MODEL", "imagen-4.0-generate-001")
+    model = os.getenv("IMAGE_MODEL", "gemini-3.1-flash-image")
     print(f"Generating image with {model}...")
-    result = client.models.generate_images(
-        model=model,
-        prompt=prompt,
-        config=types.GenerateImagesConfig(number_of_images=1),
-    )
-    if not result.generated_images:
-        raise RuntimeError(
-            "No image returned. Enable Imagen access / billing on your Google API key."
-        )
-
-    image = result.generated_images[0].image
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    if hasattr(image, "save"):
-        image.save(str(out_path))
-    elif getattr(image, "image_bytes", None):
-        out_path.write_bytes(image.image_bytes)
-    else:
-        raise RuntimeError("Unexpected image payload from API.")
-    print(f"Saved image: {out_path}")
-    return out_path
+
+    # Prefer Gemini native image models (available on many API keys)
+    try:
+        result = client.models.generate_content(
+            model=model,
+            contents=prompt,
+            config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"]),
+        )
+        for part in result.candidates[0].content.parts:
+            inline = getattr(part, "inline_data", None)
+            if inline and getattr(inline, "data", None):
+                out_path.write_bytes(inline.data)
+                print(f"Saved image: {out_path}")
+                return out_path
+        raise RuntimeError("Model returned no image bytes.")
+    except Exception as primary_err:
+        # Fallback to classic Imagen if configured / available
+        try:
+            result = client.models.generate_images(
+                model=os.getenv("IMAGEN_MODEL", "imagen-4.0-generate-001"),
+                prompt=prompt,
+                config=types.GenerateImagesConfig(number_of_images=1),
+            )
+            if not result.generated_images:
+                raise RuntimeError(str(primary_err))
+            image = result.generated_images[0].image
+            if hasattr(image, "save"):
+                image.save(str(out_path))
+            elif getattr(image, "image_bytes", None):
+                out_path.write_bytes(image.image_bytes)
+            else:
+                raise RuntimeError(str(primary_err))
+            print(f"Saved image: {out_path}")
+            return out_path
+        except Exception as secondary_err:
+            raise RuntimeError(
+                "Image generation failed. Enable billing / image quota on your Google key. "
+                f"Details: {primary_err} | {secondary_err}"
+            ) from secondary_err
 
 
 def _image_source(image_path: Path | None):
