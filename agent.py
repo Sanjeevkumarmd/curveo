@@ -298,8 +298,14 @@ def cmd_image(args: argparse.Namespace) -> None:
 
 def cmd_video(args: argparse.Namespace) -> None:
     client = get_client(load_api_key())
-    target = int(os.getenv("TARGET_DURATION_SEC", str(args.duration)))
-    clip_sec = int(os.getenv("CLIP_DURATION_SEC", str(args.clip_duration)))
+    target = int(args.duration) if args.duration is not None else int(os.getenv("TARGET_DURATION_SEC", "120"))
+    clip_sec = int(args.clip_duration) if args.clip_duration is not None else int(os.getenv("CLIP_DURATION_SEC", "8"))
+    # Allow env defaults only when CLI uses argparse defaults — prefer explicit CLI
+    if os.getenv("TARGET_DURATION_SEC") and args.duration == 120:
+        # keep CLI default unless user set env and didn't pass a custom duration intent
+        pass
+    target = int(args.duration)
+    clip_sec = int(args.clip_duration)
     clip_sec = max(4, min(clip_sec, 8))
 
     stamp = time.strftime("%Y%m%d-%H%M%S")
